@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target node --format esm --minify",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm --minify && bun run copy-wasm",
+    "copy-wasm": "mkdir -p dist && cp node_modules/@towns-protocol/olm/olm.wasm dist/olm.wasm",
     "start": "NODE_ENV=production bun dist/index.js",
     "typecheck": "tsc --noEmit"
   },
