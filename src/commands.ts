@@ -1,14 +1,25 @@
-import type { PlainMessage, SlashCommand } from '@towns-protocol/proto'
+/**
+ * Slash Command Definitions
+ * Register these with: bunx towns-bot update-commands src/commands.ts YOUR_BEARER_TOKEN
+ */
 
-const commands = [
-    {
-        name: 'help',
-        description: 'Get help with bot commands',
-    },
-    {
-        name: 'time',
-        description: 'Get the current time',
-    },
-] as const satisfies PlainMessage<SlashCommand>[]
+export const commands: { name: string; description: string }[] = [
+  {
+    name: 'help',
+    description: 'Show BeaverDev capabilities and how to use (with sass)',
+  },
+  {
+    name: 'info',
+    description: 'About BeaverDev and Towns Bot SDK overview',
+  },
+  {
+    name: 'docs',
+    description: 'Links to official bot SDK documentation',
+  },
+  {
+    name: 'ask',
+    description: 'Ask BeaverDev anything about @towns-protocol/bot',
+  },
+]
 
 export default commands
