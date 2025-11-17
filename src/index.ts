@@ -50,8 +50,11 @@ if (knowledgeSources.length === 0) {
   process.exit(1)
 }
 
-console.log('🔮 Building RAG index with embeddings...')
+console.log('🔮 Building RAG index with embeddings (cached when possible)...')
+const startTime = Date.now()
 const index = await createKnowledgeIndex(openai, knowledgeSources)
+const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+console.log(`✅ RAG index ready in ${elapsed}s`)
 
 // Initialize bot
 console.log('🤖 Initializing bot...')
@@ -219,8 +222,11 @@ app.use(logger())
 app.post('/webhook', jwtMiddleware, handler)
 
 // Health check endpoint
-app.get('/health', (c) =>
-  c.json({
+app.get('/health', async (c) => {
+  const { getCacheInfo } = await import('./rag/cache')
+  const cacheInfo = getCacheInfo()
+  
+  return c.json({
     status: 'ok',
     bot: {
       id: bot.botId,
@@ -235,9 +241,10 @@ app.get('/health', (c) =>
         checksum: s.checksum,
       })),
     },
+    cache: cacheInfo,
     timestamp: new Date().toISOString(),
   })
-)
+})
 
 // Root endpoint
 app.get('/', (c) =>

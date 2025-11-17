@@ -1,25 +1,38 @@
 /**
  * Knowledge Index with Embeddings
- * Semantic search using OpenAI embeddings
+ * Semantic search using OpenAI embeddings with caching
  */
 
 import type OpenAI from 'openai'
 import type { KnowledgeChunk, EmbeddedChunk, KnowledgeSource } from '../types/knowledge'
 import { BeaverDevRAG } from '../rag'
+import { loadCache, saveCache } from './cache'
 
 export class KnowledgeIndex {
   private embeddedChunks: EmbeddedChunk[] = []
 
   constructor(
     private openai: OpenAI,
-    private chunks: KnowledgeChunk[]
+    private chunks: KnowledgeChunk[],
+    private checksum: string
   ) {}
 
   /**
-   * Build index by generating embeddings for all chunks
+   * Build index by generating embeddings for all chunks (with caching)
    */
   async buildIndex(): Promise<void> {
+    // Try to load from cache first
+    const cachedChunks = loadCache(this.checksum)
+    
+    if (cachedChunks) {
+      this.embeddedChunks = cachedChunks
+      console.log(`⚡ Using cached embeddings (skipped API calls!)`)
+      return
+    }
+
+    // No cache, generate fresh embeddings
     console.log(`🔮 Generating embeddings for ${this.chunks.length} chunks...`)
+    console.log(`   This will take ~4-5 minutes on first deploy`)
 
     // Process in batches to avoid rate limits
     const batchSize = 100
@@ -34,10 +47,15 @@ export class KnowledgeIndex {
         })
       }
 
-      console.log(`✅ Embedded batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(this.chunks.length / batchSize)}`)
+      const progress = Math.floor(i / batchSize) + 1
+      const total = Math.ceil(this.chunks.length / batchSize)
+      console.log(`✅ Embedded batch ${progress}/${total}`)
     }
 
     console.log(`🎉 Index built with ${this.embeddedChunks.length} embedded chunks`)
+    
+    // Save to cache for future deploys
+    saveCache(this.embeddedChunks, this.checksum)
   }
 
   /**
@@ -86,7 +104,7 @@ export class KnowledgeIndex {
 }
 
 /**
- * Create knowledge index from knowledge sources
+ * Create knowledge index from knowledge sources (with caching)
  */
 export async function createKnowledgeIndex(
   openai: OpenAI,
@@ -96,8 +114,11 @@ export async function createKnowledgeIndex(
   const rag = new BeaverDevRAG(sources)
   await rag.initialize()
 
-  // Create index with embeddings
-  const index = new KnowledgeIndex(openai, rag.getChunks())
+  // Generate checksum from all source checksums
+  const checksum = sources.map((s) => s.checksum).join('-')
+
+  // Create index with embeddings (will use cache if available)
+  const index = new KnowledgeIndex(openai, rag.getChunks(), checksum)
   await index.buildIndex()
 
   return index

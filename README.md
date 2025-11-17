@@ -6,11 +6,12 @@
 
 - **🤖 AI-Powered Bot Assistance**: Answers questions specifically about @towns-protocol/bot (v0.0.411+)
 - **📚 RAG System**: Semantic search over comprehensive bot SDK documentation
+- **⚡ Embedding Cache**: Fast deploys - embeddings cached after first generation
 - **🧵 Thread Management**: Maintains full conversation context across multiple messages
-- **⚡ Smart & Sassy**: Playful personality that makes learning bot development fun
+- **😏 Smart & Sassy**: Playful personality that makes learning bot development fun
 - **🎯 Slash Commands**: Quick access to help, docs, and interactive Q&A
 - **💾 SQLite Database**: Persistent thread context storage
-- **🔮 Embeddings**: Powered by OpenAI text-embedding-3-small for semantic search
+- **🔮 OpenAI Integration**: GPT-4o-mini + text-embedding-3-small
 
 ## Quick Start
 
