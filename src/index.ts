@@ -187,8 +187,14 @@ const respondWithKnowledge = async (
       return false
     }
 
+    // Determine the most recent user question in this thread for retrieval & prompt
+    const latestUserMessage =
+      context.conversation
+        .filter((msg) => msg.authorId === userId)
+        .slice(-1)[0]?.content || context.initialPrompt
+
     // Retrieve relevant chunks via RAG
-    const chunks = await index.retrieveRelevantChunks(context.initialPrompt, 5)
+    const chunks = await index.retrieveRelevantChunks(latestUserMessage, 5)
 
     if (chunks.length === 0) {
       await handler.sendMessage(
@@ -213,7 +219,7 @@ const respondWithKnowledge = async (
         const prompt = buildSystemPrompt(beaverPersona, {
           conversationSummary: summarizeConversation(context.conversation, bot.botId),
           retrievedChunks: chunks,
-          userMessage: context.initialPrompt,
+          userMessage: latestUserMessage,
         })
 
         // Call OpenAI (WITHOUT json_object mode - it causes issues with code blocks)
@@ -223,7 +229,7 @@ const respondWithKnowledge = async (
           max_tokens: 2000,
           messages: [
             { role: 'system', content: prompt },
-            { role: 'user', content: context.initialPrompt },
+            { role: 'user', content: latestUserMessage },
           ],
         })
 

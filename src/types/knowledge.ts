@@ -2,7 +2,7 @@
  * Knowledge Base Types for RAG System
  */
 
-export type KnowledgeSourceId = 'agents_md'
+export type KnowledgeSourceId = 'agents_md' | 'docs_getting_started'
 
 export interface KnowledgeSource {
   id: KnowledgeSourceId

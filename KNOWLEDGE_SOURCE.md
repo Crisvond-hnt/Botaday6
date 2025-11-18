@@ -2,7 +2,10 @@
 
 ## Overview
 
-BeaverDev uses **AGENTS.md** as its **ONLY** knowledge source. This file contains the comprehensive Towns Bot SDK documentation.
+BeaverDev now uses a **multi-source** knowledge base:
+
+- **AGENTS.md** – comprehensive Towns Bot SDK documentation.
+- **DOCS_GETTING_STARTED.md** – local mirror of the official getting-started guide from `https://docs.towns.com/build/bots/getting-started`.
 
 ## AGENTS.md Verification
 
@@ -65,13 +68,14 @@ Or:
 ### Current Setup
 ```
 /Users/crisvond/stream6/
-├── AGENTS.md                 ← ONLY knowledge source (2445 lines)
+├── AGENTS.md                 ← Primary SDK guide (multi-thousand lines)
+├── DOCS_GETTING_STARTED.md   ← Mirror of Getting Started docs (deployment, wallets, etc.)
 ├── package.json
 ├── src/
 │   ├── config/
-│   │   ├── knowledge.ts      ← Loads AGENTS.md
+│   │   ├── knowledge.ts      ← Loads AGENTS.md + DOCS_GETTING_STARTED.md
 │   │   └── validation.ts     ← Validates AGENTS.md exists
-│   ├── rag.ts                ← Chunks AGENTS.md into ~180 pieces
+│   ├── rag.ts                ← Chunks all sources into chunks
 │   └── rag/
 │       └── index.ts          ← Creates embeddings for chunks
 └── ...
@@ -88,6 +92,11 @@ const KNOWN_SOURCES: KnowledgeSource[] = [
     label: 'Towns Bot SDK Complete Guide (AGENTS.md)',
     fileName: 'AGENTS.md', // Loads from project root
   },
+  {
+    id: 'docs_getting_started',
+    label: 'Towns Bots Getting Started (docs.towns.com)',
+    fileName: 'DOCS_GETTING_STARTED.md', // Mirror of docs.towns.com/build/bots/getting-started
+  },
 ]
 ```
 
@@ -96,8 +105,8 @@ const KNOWN_SOURCES: KnowledgeSource[] = [
 ### 1. Loading Phase (Startup)
 ```
 1. Validate AGENTS.md exists
-2. Load AGENTS.md content (240KB)
-3. Chunk by ## headers → ~180 chunks
+2. Load AGENTS.md + DOCS_GETTING_STARTED.md content
+3. Chunk by ## headers → N chunks across all sources
 4. Extract keywords from each chunk
 5. Generate embeddings for all chunks (OpenAI)
 6. Store in memory for fast retrieval
@@ -137,6 +146,14 @@ After chunking AGENTS.md, you get chunks like:
   source: 'agents_md',
   section: 'onSlashCommand - Command Handler',
   keywords: ['onSlashCommand', 'command', 'handler', 'bot', 'slash', ...]
+}
+
+{
+  id: 'docs_getting_started:render_deploy',
+  content: '## Deploy Your Bot (Render.com)\n\n1. Sign up for Render...',
+  source: 'docs_getting_started',
+  section: 'Deploy Your Bot (Render.com)',
+  keywords: ['render', 'deploy', 'webhook', 'PORT', 'bun']
 }
 ```
 

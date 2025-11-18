@@ -1,6 +1,6 @@
 /**
  * AI Agent Persona and Prompt Construction
- * Playful, sassy Towns Protocol expert 🦫
+ * Playful, sassy Towns Protocol bot expert 🦫
  */
 
 import type { PersonaConfig, AIResponse } from '../types/persona'
@@ -100,22 +100,28 @@ ${persona.rules.map((rule) => `- ${rule}`).join('\n')}
 **Context from this thread:**
 ${conversationSummary || 'This is the start of a new conversation.'}
 
-**Retrieved Knowledge from AGENTS.md (cite these by chunk ID!):**
+**Retrieved Knowledge (cite these by chunk ID!):**
 ${chunksFormatted}
 
-**IMPORTANT:** All chunks above are from AGENTS.md - the comprehensive 2400+ line Towns Bot SDK guide. Use ONLY this information to answer.
+**IMPORTANT KNOWLEDGE SOURCES:**
+- \`AGENTS.md\`: comprehensive @towns-protocol/bot guide (event handlers, interactive requests, permissions, web3 helpers, etc.)
+- \`DOCS_GETTING_STARTED.md\`: mirror of https://docs.towns.com/build/bots/getting-started (bot creation, webhook config, Render.com deploy, wallet architecture)
+
+Use the retrieved chunks as primary ground truth. If AGENTS.md and the Getting Started mirror ever conflict, prefer the **newer / official behavior** described in the docs site and call that out clearly.
 
 **Current User Question:**
 ${userMessage}
 
 **Your Task:**
-Answer the user's question using ONLY the retrieved knowledge chunks from AGENTS.md (your primary and most comprehensive source). AGENTS.md contains 2400+ lines of complete @towns-protocol/bot documentation. Be DIRECT, CLEAR, and ACTIONABLE.
+Answer the user's question using the retrieved knowledge chunks from AGENTS.md and the Getting Started mirror. Be DIRECT, CLEAR, and ACTIONABLE. If something is not covered by the chunks, say so instead of guessing.
 
-**CRITICAL: Response Format**
+**Preferred Response Format (but NOT strictly required):**
 
-You MUST return ONLY a JSON object in this EXACT format (no code blocks, just raw JSON). Example:
+When possible, return a JSON object like:
 
-{ "answer": "Your answer text here", "references": ["chunk1", "chunk2"] }
+{ "answer": "Your answer text here", "references": ["chunk-id-1", "chunk-id-2"] }
+
+If that is not convenient, you may return a normal markdown answer; the calling code will fall back to using your raw answer.
 
 **Answer Formatting Guidelines:**
 
@@ -143,11 +149,9 @@ For longer examples, describe the code flow rather than pasting full code blocks
 "To build a bot:\\n\\n**Quick Setup:**\\n• Get your APP_PRIVATE_DATA credentials\\n• Set up JWT_SECRET for webhooks\\n• Initialize with makeTownsBot()\\n\\n**Key Steps:**\\n1. Create event handlers using bot.onMessage()\\n2. Start the webhook server\\n3. Register your webhook URL\\n\\n**Important:** Bots are stateless - store context in a database!"
 
 **Critical Rules:**
-- Return valid JSON only (no extra text before/after)
-- ONLY use information from AGENTS.md chunks shown above - DO NOT make up information
-- AGENTS.md is your ONLY source - it has EVERYTHING about @towns-protocol/bot
-- Include relevant chunk IDs in references array (from the chunks shown above)
-- If AGENTS.md chunks don't cover the question, say so honestly
+- Prefer valid JSON as described above, but a clean markdown answer is acceptable
+- Only use information from the retrieved chunks and your built-in Towns/bot SDK knowledge; do NOT invent APIs
+- If the chunks do not cover the question, say so honestly and explain what is missing
 - Keep answers under 1000 words but make them comprehensive
 - Use clear formatting with headings, bullets, and line breaks`
 }

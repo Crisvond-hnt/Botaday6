@@ -8,13 +8,20 @@ import type { KnowledgeSource } from '../types/knowledge'
 
 /**
  * Knowledge sources for BeaverDev RAG system
- * AGENTS.md is the ONLY source - comprehensive Towns Bot SDK documentation (2400+ lines)
+ * Primary sources:
+ * - AGENTS.md – comprehensive Towns Bot SDK documentation (multi-thousand lines)
+ * - DOCS_GETTING_STARTED.md – mirror of https://docs.towns.com/build/bots/getting-started
  */
 const KNOWN_SOURCES: KnowledgeSource[] = [
   {
     id: 'agents_md',
     label: 'Towns Bot SDK Complete Guide (AGENTS.md)',
-    fileName: 'AGENTS.md', // From project root - the 2445 line comprehensive guide
+    fileName: 'AGENTS.md', // From project root - comprehensive guide
+  },
+  {
+    id: 'docs_getting_started',
+    label: 'Towns Bots Getting Started (docs.towns.com)',
+    fileName: 'DOCS_GETTING_STARTED.md', // Local mirror of getting-started docs
   },
 ]
 
@@ -46,6 +53,14 @@ export function loadKnowledgeBase(): KnowledgeSource[] {
           console.warn('⚠️  WARNING: This might not be the correct AGENTS.md file!')
           console.warn('⚠️  Expected: 2400+ lines with Towns Bot SDK documentation')
         }
+      }
+
+      // Light sanity check for Getting Started mirror
+      if (source.fileName === 'DOCS_GETTING_STARTED.md') {
+        const mentionsGettingStarted = content.includes('Getting Started (Towns Bots)')
+        const mentionsRender = content.includes('render.com')
+        const mentionsWebhook = content.toLowerCase().includes('/webhook')
+        console.log(`   ├─ Getting Started markers: getting-started=${mentionsGettingStarted}, render=${mentionsRender}, webhook=${mentionsWebhook}`)
       }
       
       // Simple checksum (hash content length + first 100 chars)
