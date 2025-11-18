@@ -78,6 +78,7 @@ interface PendingQuestion {
   threadId: string
   channelId: string
   timestamp: number
+  tipReceived?: boolean // Flag to track if tip was already received (for retry without new tip)
 }
 
 const pendingQuestions = new Map<string, PendingQuestion>() // userId -> pending question
@@ -145,8 +146,14 @@ async function getEthPrice(): Promise<number> {
 
 /**
  * Main AI response function using RAG + OpenAI
+ * Returns true if successful, false if failed (so caller knows whether to keep pending question)
  */
-const respondWithKnowledge = async (threadId: string, channelId: string, handler: any) => {
+const respondWithKnowledge = async (
+  threadId: string,
+  channelId: string,
+  handler: any,
+  userId: string
+): Promise<boolean> => {
   try {
     // Fetch thread context from database
     const context = await fetchThreadContext(threadId)
@@ -156,7 +163,7 @@ const respondWithKnowledge = async (threadId: string, channelId: string, handler
         '🦫 Hmm, I seem to have lost the thread context. Could you start fresh?',
         { threadId }
       )
-      return
+      return false
     }
 
     // Retrieve relevant chunks via RAG
@@ -168,34 +175,79 @@ const respondWithKnowledge = async (threadId: string, channelId: string, handler
         '🦫 Hmm, I couldn\'t find relevant info for that. Try rephrasing your question, or ask about specific Towns Protocol features!',
         { threadId }
       )
-      return
+      return false
     }
 
-    // Build system prompt
-    const prompt = buildSystemPrompt(beaverPersona, {
-      conversationSummary: summarizeConversation(context.conversation, bot.botId),
-      retrievedChunks: chunks,
-      userMessage: context.initialPrompt,
-    })
+    // Call OpenAI with retries
+    let attempts = 0
+    const maxAttempts = 2
+    let payload: any = null
 
-    // Call OpenAI
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.2, // Lower temperature for more focused, consistent responses
-      max_tokens: 2000, // More tokens for detailed answers
-      response_format: { type: 'json_object' }, // Enforce JSON response format
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: context.initialPrompt },
-      ],
-    })
+    while (attempts < maxAttempts && !payload) {
+      attempts++
+      console.log(`🤖 OpenAI attempt ${attempts}/${maxAttempts}`)
 
-    // Validate response
-    const payload = validateResponse(completion.choices[0].message.content ?? '')
+      try {
+        // Build system prompt
+        const prompt = buildSystemPrompt(beaverPersona, {
+          conversationSummary: summarizeConversation(context.conversation, bot.botId),
+          retrievedChunks: chunks,
+          userMessage: context.initialPrompt,
+        })
 
-    // Clean up the answer - ensure it's well-formatted
+        // Call OpenAI
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          temperature: 0.2,
+          max_tokens: 2000,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: prompt },
+            { role: 'user', content: context.initialPrompt },
+          ],
+        })
+
+        const rawContent = completion.choices[0].message.content ?? ''
+        console.log('📝 Raw OpenAI response (first 200 chars):', rawContent.substring(0, 200))
+
+        // Validate response
+        const validated = validateResponse(rawContent)
+
+        // Check if validation actually succeeded (not a fallback error message)
+        if (
+          validated.answer &&
+          !validated.answer.includes('My circuits got crossed') &&
+          !validated.answer.includes('Could you ask that again')
+        ) {
+          payload = validated
+          console.log('✅ OpenAI response validated successfully')
+        } else {
+          console.log('⚠️ OpenAI response validation returned fallback message, retrying...')
+        }
+      } catch (attemptError) {
+        console.error(`❌ Attempt ${attempts} failed:`, attemptError)
+      }
+    }
+
+    // If all attempts failed, inform user they can retry without paying
+    if (!payload) {
+      console.error('❌ All OpenAI attempts failed')
+      await handler.sendMessage(
+        channelId,
+        `🦫 **My apologies!** Something went wrong on my end and I couldn't generate a proper answer. 😞
+
+**Good news:** You already paid, so just reply in this thread with your question again and I'll answer it **without requiring another tip**. Your original payment covers it!
+
+Sorry for the inconvenience! ☕`,
+        { threadId }
+      )
+      // Return false but DON'T clean up pending question - let them retry
+      return false
+    }
+
+    // Successfully got a valid answer! Clean up and format
     let cleanAnswer = payload.answer.trim()
-    
+
     // Ensure proper spacing after headings and before code blocks
     cleanAnswer = cleanAnswer.replace(/\*\*([^*]+)\*\*\n(?!\n)/g, '**$1**\n\n')
     cleanAnswer = cleanAnswer.replace(/\n```/g, '\n\n```')
@@ -217,13 +269,22 @@ const respondWithKnowledge = async (threadId: string, channelId: string, handler
       authorId: bot.botId,
       content: message,
     })
+
+    console.log('✅ Answer sent successfully')
+    return true
   } catch (error) {
     console.error('❌ Error generating response:', error)
     await handler.sendMessage(
       channelId,
-      '🦫 Oops! My circuits got crossed. ☕ Try asking again in a moment?',
+      `🦫 **Oops!** Something went wrong and I couldn't answer your question. 😞
+
+**Don't worry:** You already paid, so just reply in this thread with your question again and I'll answer it **without requiring another tip**.
+
+Sorry for the technical difficulties! ☕`,
       { threadId }
     )
+    // Return false but DON'T clean up pending question
+    return false
   }
 }
 
@@ -271,21 +332,59 @@ Tip this message to unlock the answer! 🎯`
     return
   }
 
-  // Handle thread replies - Continue existing conversation with tip request
+  // Handle thread replies - Continue existing conversation
   if (event.threadId) {
     console.log(`🦫 Thread reply from ${event.userId} in thread ${event.threadId}`)
 
-    // Store the follow-up question as pending (awaiting tip)
-    pendingQuestions.set(event.userId, {
-      userId: event.userId,
-      question: event.message,
-      threadId,
-      channelId: event.channelId,
-      timestamp: Date.now(),
-    })
+    // Check if user has already paid but previous answer failed
+    const existingPending = pendingQuestions.get(event.userId)
+    const alreadyPaid = existingPending?.tipReceived === true
 
-    // Send tip request for follow-up question
-    const tipMessage = `🦫 **Another question? I like your style!**
+    if (alreadyPaid) {
+      // User already paid, answer directly without new tip
+      console.log(`   💰 User already paid, answering without new tip request`)
+
+      await handler.sendMessage(
+        event.channelId,
+        '🦫 **Got it!** Let me try answering that again... 🔍',
+        { threadId }
+      )
+
+      // Update the question to the new one
+      pendingQuestions.set(event.userId, {
+        userId: event.userId,
+        question: event.message,
+        threadId,
+        channelId: event.channelId,
+        timestamp: Date.now(),
+        tipReceived: true, // Keep the flag
+      })
+
+      // Ensure question is recorded
+      await ensureThreadStarter(threadId, event.eventId, event.userId, event.message)
+
+      // Try to answer again
+      const success = await respondWithKnowledge(threadId, event.channelId, handler, event.userId)
+
+      // Clean up if successful
+      if (success) {
+        pendingQuestions.delete(event.userId)
+        console.log(`   ✅ Retry successful, question cleaned up`)
+      } else {
+        console.log(`   ⚠️ Retry also failed, keeping question pending`)
+      }
+    } else {
+      // Normal flow - request tip for follow-up question
+      pendingQuestions.set(event.userId, {
+        userId: event.userId,
+        question: event.message,
+        threadId,
+        channelId: event.channelId,
+        timestamp: Date.now(),
+      })
+
+      // Send tip request for follow-up question
+      const tipMessage = `🦫 **Another question? I like your style!**
 
 To unlock the answer to this follow-up question, please **tip $0.50 (or more!)** on this message. ☕
 
@@ -294,7 +393,8 @@ To unlock the answer to this follow-up question, please **tip $0.50 (or more!)**
 
 Tip this message to get your answer! 🎯`
 
-    await handler.sendMessage(event.channelId, tipMessage, { threadId })
+      await handler.sendMessage(event.channelId, tipMessage, { threadId })
+    }
   }
 })
 
@@ -388,6 +488,18 @@ bot.onTip(async (handler, event) => {
     return
   }
 
+  // Check if they already paid (tipping again for same question)
+  if (pending.tipReceived) {
+    await handler.sendMessage(
+      pending.channelId,
+      `🦫 **Hey, you already paid for this!** No need to tip again. 😊
+
+Just reply in the thread with your question and I'll answer it. Your original payment still covers it!`,
+      { threadId: pending.threadId }
+    )
+    return
+  }
+
   // Get current ETH price from CoinGecko
   const ethPrice = await getEthPrice()
 
@@ -436,11 +548,25 @@ Let me dig through my knowledge base and get you that answer... 🔍`,
   await ensureThreadStarter(pending.threadId, pending.threadId, pending.userId, pending.question)
 
   // Generate and send the answer
-  await respondWithKnowledge(pending.threadId, pending.channelId, handler)
+  const success = await respondWithKnowledge(
+    pending.threadId,
+    pending.channelId,
+    handler,
+    event.userId
+  )
 
-  // Clean up pending question
-  pendingQuestions.delete(event.userId)
-  console.log(`   ✅ Question answered and cleaned up for user ${event.userId}`)
+  // Only clean up pending question if answer was successfully provided
+  if (success) {
+    pendingQuestions.delete(event.userId)
+    console.log(`   ✅ Question answered and cleaned up for user ${event.userId}`)
+  } else {
+    console.log(
+      `   ⚠️ Answer failed, keeping question pending so user can retry without new tip`
+    )
+    // Mark that they've already paid by adding a flag
+    pending.tipReceived = true
+    pendingQuestions.set(event.userId, pending)
+  }
 })
 
 /**
