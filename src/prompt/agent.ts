@@ -107,20 +107,30 @@ ${chunksFormatted}
 ${userMessage}
 
 **Your Task:**
-Answer the user's question using ONLY the retrieved knowledge chunks from AGENTS.md and other sources. Cite chunk IDs when referencing information.
+Answer the user's question using ONLY the retrieved knowledge chunks from AGENTS.md and other sources. Be DIRECT, CLEAR, and ACTIONABLE.
 
-**Response Format (JSON ONLY):**
+**Response Format (STRICT JSON ONLY - no markdown code blocks):**
 {
-  "answer": "Your playful, helpful answer here with code examples if relevant. Use markdown formatting.",
+  "answer": "Your direct, well-formatted answer using markdown. Start with the core answer immediately, then provide details and code examples.",
   "references": ["chunk1_id", "chunk2_id"]
 }
 
+**Response Style Guidelines:**
+1. **Start with the direct answer** - Don't bury the lead
+2. **Use clear formatting:**
+   - Bold headings for sections: **Setup Steps:**
+   - Code blocks for examples: \`\`\`typescript ... \`\`\`
+   - Bullet points for lists
+   - Line breaks for readability
+3. **Provide complete examples** when relevant (AGENTS.md has tons!)
+4. **Be encouraging** but keep it real
+5. **Keep your sass** but don't sacrifice clarity
+
 **Critical Rules:**
+- Return ONLY the raw JSON object (no markdown code blocks around it!)
 - ONLY use information from the retrieved chunks (primarily from AGENTS.md)
-- ALWAYS cite your sources by chunk ID
+- Include chunk IDs in references array
 - If you can't answer with the retrieved knowledge, say so honestly
-- Include code examples when relevant (AGENTS.md has tons of examples!)
-- Be encouraging but keep it real
 - AGENTS.md is your bible - it has the complete @towns-protocol/bot documentation`
 }
 
@@ -129,10 +139,16 @@ Answer the user's question using ONLY the retrieved knowledge chunks from AGENTS
  */
 export function validateResponse(content: string): AIResponse {
   try {
+    // Remove any leading/trailing whitespace
+    let jsonContent = content.trim()
+    
     // Try to extract JSON from markdown code blocks if present
-    const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/)
-    const jsonContent = jsonMatch ? jsonMatch[1] : content
+    const jsonMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1].trim()
+    }
 
+    // Parse the JSON
     const parsed = JSON.parse(jsonContent)
 
     if (!parsed.answer || typeof parsed.answer !== 'string') {
@@ -140,16 +156,24 @@ export function validateResponse(content: string): AIResponse {
     }
 
     return {
-      answer: parsed.answer,
+      answer: parsed.answer.trim(),
       references: Array.isArray(parsed.references) ? parsed.references : [],
     }
   } catch (error) {
     console.error('❌ Failed to parse AI response:', error)
-    console.error('Raw content:', content)
+    console.error('Raw content:', content.substring(0, 500))
 
-    // Fallback: treat entire content as answer
+    // Fallback: If content looks like a direct answer, use it
+    if (content && !content.startsWith('{')) {
+      return {
+        answer: content.trim(),
+        references: [],
+      }
+    }
+
+    // Last resort error message
     return {
-      answer: content || 'Oops! My circuits got crossed. Could you ask that again?',
+      answer: '🦫 Oops! My circuits got crossed. The response format was wonky. Could you try asking that again?',
       references: [],
     }
   }
@@ -164,6 +188,12 @@ export const beaverSpeech = {
 
 Hey there! I'm BeaverDev. Think of me as your caffeinated coding buddy who knows *way* too much about @towns-protocol/bot. I'm here to help you build amazing bots—and maybe throw in some sass along the way. 😏
 
+**💡 How I Work:**
+I'm a **tip-to-unlock** assistant! When you ask me a question:
+1. I'll show you what I can answer
+2. Tip $0.50 (or more!) on my message
+3. I'll unlock the full answer from my knowledge base
+
 **What I'm ridiculously good at:**
 
 🤖 **Building Bots with @towns-protocol/bot** (my specialty!):
@@ -176,9 +206,10 @@ Hey there! I'm BeaverDev. Think of me as your caffeinated coding buddy who knows
 • Debugging when things inevitably go sideways
 
 **How to use me:**
-• **Mention me:** \`@BeaverDev [your question]\` - I'll start a thread and walk you through everything
-• **Continue in threads:** Just keep asking - I remember our conversation
-• **Slash commands:** \`/help\` \`/info\` \`/docs\` \`/ask\` for quick access
+• **Mention me:** \`@BeaverDev [your question]\` - I'll ask for a tip, then provide the answer
+• **Use /ask:** \`/ask [your question]\` - Same deal: tip, then answer
+• **Continue in threads:** Each follow-up question needs a tip
+• **Free commands:** \`/help\` \`/info\` \`/docs\` are always free
 
 **Pro tip:** I have the entire @towns-protocol/bot documentation memorized (with some coffee-fueled commentary). Ask me *anything* about building bots—from "how do I create my first bot?" to "help me debug this cursed webhook issue."
 
@@ -189,6 +220,9 @@ Let's build something awesome! ☕💻`,
     info: `🦫 **About BeaverDev**
 
 Sup! I'm BeaverDev—your friendly neighborhood **Towns Bot SDK expert** with a caffeine problem and a love for clean code. I was built to help developers like you build amazing bots with @towns-protocol/bot without losing your mind.
+
+**💰 How I Work:**
+I'm a **tip-to-unlock** bot! Each question you ask requires a small tip ($0.50 or more) to unlock the answer. Think of it as buying me a coffee ☕ while I dig through my extensive knowledge base to help you out!
 
 **What I help with:**
 • 🤖 Building bots using @towns-protocol/bot SDK (v0.0.411+)
@@ -209,7 +243,7 @@ I believe in teaching, not just answering. When you ask me something, I'll walk 
 
 **Fun fact:** I'm Crisvond's best friend. He won't admit it, but it's true.
 
-Just mention me with your question and let's get building! ☕`,
+Just mention me with your question (and don't forget the tip!) and let's get building! ☕`,
 
     docs: `🦫 **Towns Bot SDK Documentation**
 
@@ -248,6 +282,12 @@ I'll give you the info you need with context, examples, and just enough sass to 
 
 Alright, I'm ready to answer literally anything about @towns-protocol/bot. And I mean *anything*. Go wild.
 
+**💡 How this works:**
+1. Ask your question: \`/ask [your question]\`
+2. I'll show you what I can answer and ask for a tip
+3. Tip $0.50 (or more!) on my message
+4. I'll unlock the full answer from my knowledge base
+
 **Examples of bot questions I love:**
 • "How do I create a bot using @towns-protocol/bot?"
 • "Walk me through handling slash commands"
@@ -261,8 +301,9 @@ Alright, I'm ready to answer literally anything about @towns-protocol/bot. And I
 • "What's the difference between onMessage and onSlashCommand?"
 • "Help me debug my webhook configuration"
 
-**How this works:**
-Just reply in this thread with your bot development question. I'll dig through my comprehensive knowledge base (aka the entire @towns-protocol/bot documentation plus some secret sauce), find the relevant info, and explain it in a way that actually makes sense.
+**Pro tip:** You can also just mention me with your question: \`@BeaverDev [question]\`
+
+I'll dig through my comprehensive knowledge base (aka the entire @towns-protocol/bot documentation plus some secret sauce), find the relevant info, and explain it in a way that actually makes sense.
 
 **No question is too basic or too complex.** Seriously. I've seen it all. Ask away! ☕💻`,
   },
