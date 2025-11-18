@@ -84,8 +84,8 @@ Bot: [Comprehensive answer with code examples, best practices, etc.]
 
 ```bash
 # Clone the repository
-git clone https://github.com/Crisvond-hnt/Botaday6.git
-cd Botaday6
+git clone https://github.com/Crisvond-hnt/AIAgent_Towns_Bot.git
+cd AIAgent_Towns_Bot
 
 # Install dependencies
 bun install
